@@ -20,6 +20,20 @@ public sealed class SkinPackageRepositoryService
             && item.SkinNumber == skin.Number);
     }
 
+    public async Task<IReadOnlyList<RepositorySkinPackage>> GetAllPackagesAsync(bool refresh = false)
+    {
+        if (refresh)
+            InvalidateCache();
+
+        await EnsureIndexAsync();
+        return _cache!
+            .Where(item => !string.IsNullOrWhiteSpace(item.File)
+                           && item.File.EndsWith(".fantome", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
     public async Task<string> DownloadPackageAsync(RepositorySkinPackage package)
     {
         if (string.IsNullOrWhiteSpace(package.File) ||
