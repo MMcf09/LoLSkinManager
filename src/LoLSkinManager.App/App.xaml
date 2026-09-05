@@ -1,0 +1,12 @@
+<Application x:Class="LoLSkinManager.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="BgBrush" Color="#0F1117"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#171A22"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#C89B3C"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#F5F5F5"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#A7AFBE"/>
+    </Application.Resources>
+</Application>
