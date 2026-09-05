@@ -3,18 +3,25 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace LoLSkinManager.App;
 
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<SkinPackage> _packages = new();
+    private readonly ObservableCollection<ChampionCatalogItem> _champions = new();
+    private readonly ObservableCollection<SkinCatalogItem> _skins = new();
     private readonly SkinLibraryService _library = new();
+    private readonly RiotCatalogService _catalog = new();
+    private string _catalogVersion = string.Empty;
 
     public MainWindow()
     {
         InitializeComponent();
         PackagesList.ItemsSource = _packages;
+        ChampionsList.ItemsSource = _champions;
+        SkinsItemsControl.ItemsSource = _skins;
         Loaded += MainWindow_Loaded;
     }
 
@@ -26,11 +33,72 @@ public partial class MainWindow : Window
                 _packages.Add(package);
 
             RefreshState();
+            await LoadCatalogAsync();
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Falha ao carregar a biblioteca:\n{ex.Message}", "LoL Skin Manager", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Falha ao iniciar o aplicativo:\n{ex.Message}", "LoL Skin Manager", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private async Task LoadCatalogAsync()
+    {
+        CatalogStatusText.Text = "Carregando catálogo oficial...";
+        var result = await _catalog.LoadChampionsAsync();
+        _catalogVersion = result.Version;
+
+        _champions.Clear();
+        foreach (var champion in result.Champions)
+            _champions.Add(champion);
+
+        CatalogStatusText.Text = $"Data Dragon {_catalogVersion} • {_champions.Count} campeões";
+
+        if (_champions.Count > 0)
+            ChampionsList.SelectedIndex = 0;
+    }
+
+    private async void ChampionsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ChampionsList.SelectedItem is not ChampionCatalogItem champion || string.IsNullOrWhiteSpace(_catalogVersion))
+            return;
+
+        try
+        {
+            SelectedChampionText.Text = champion.Name;
+            SkinCountText.Text = "Carregando skins...";
+            _skins.Clear();
+
+            var skins = await _catalog.LoadSkinsAsync(_catalogVersion, champion);
+            foreach (var skin in skins)
+                _skins.Add(skin);
+
+            SkinCountText.Text = $"{_skins.Count} skins oficiais";
+        }
+        catch (Exception ex)
+        {
+            SkinCountText.Text = "Falha ao carregar as skins.";
+            MessageBox.Show($"Não foi possível carregar as skins de {champion.Name}:\n{ex.Message}", "LoL Skin Manager", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ChampionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(ChampionsList.ItemsSource);
+        if (view == null)
+            return;
+
+        var term = ChampionSearchBox.Text.Trim();
+        view.Filter = item =>
+        {
+            if (item is not ChampionCatalogItem champion)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(term))
+                return true;
+
+            return champion.Name.Contains(term, StringComparison.CurrentCultureIgnoreCase)
+                   || champion.Title.Contains(term, StringComparison.CurrentCultureIgnoreCase);
+        };
     }
 
     private async void Import_Click(object sender, RoutedEventArgs e)
