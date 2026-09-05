@@ -35,6 +35,7 @@ public partial class MainWindow : Window
 
             RefreshState();
             await LoadCatalogAsync();
+            await RefreshRemotePackageCountAsync();
         }
         catch (Exception ex)
         {
@@ -56,6 +57,116 @@ public partial class MainWindow : Window
 
         if (_champions.Count > 0)
             ChampionsList.SelectedIndex = 0;
+    }
+
+    private async Task RefreshRemotePackageCountAsync()
+    {
+        try
+        {
+            var packages = await _packageRepository.GetAllPackagesAsync(refresh: true);
+            DownloadAllStatusText.Text = $"Pacotes remotos: {packages.Count}";
+        }
+        catch
+        {
+            DownloadAllStatusText.Text = "Pacotes remotos: indisponível";
+        }
+    }
+
+    private async void DownloadAll_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadAllButton.IsEnabled = false;
+
+        try
+        {
+            DownloadAllStatusText.Text = "Lendo índice do GitHub...";
+            var remotePackages = await _packageRepository.GetAllPackagesAsync(refresh: true);
+
+            if (remotePackages.Count == 0)
+            {
+                DownloadAllStatusText.Text = "Pacotes remotos: 0";
+                MessageBox.Show(
+                    "Ainda não existem arquivos .fantome cadastrados em skins/index.json. Quando o índice tiver pacotes, este botão baixa todos com um clique.",
+                    "Nenhum pacote disponível",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"Foram encontrados {remotePackages.Count} pacotes .fantome no repositório. Deseja baixar e importar todos agora?",
+                "Baixar todos os pacotes",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                DownloadAllStatusText.Text = $"Pacotes remotos: {remotePackages.Count}";
+                return;
+            }
+
+            var imported = 0;
+            var skipped = 0;
+            var failed = 0;
+
+            for (var i = 0; i < remotePackages.Count; i++)
+            {
+                var mapping = remotePackages[i];
+                var displayName = string.IsNullOrWhiteSpace(mapping.DisplayName)
+                    ? $"{mapping.ChampionId} Skin {mapping.SkinNumber}"
+                    : mapping.DisplayName!;
+
+                DownloadAllStatusText.Text = $"Baixando {i + 1}/{remotePackages.Count}: {displayName}";
+
+                if (_packages.Any(p => p.Name.Equals(displayName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string? tempPath = null;
+                try
+                {
+                    tempPath = await _packageRepository.DownloadPackageAsync(mapping);
+                    var package = await _library.ImportAsync(tempPath);
+                    package.Name = displayName;
+                    package.IsEnabled = false;
+                    _packages.Add(package);
+                    imported++;
+                }
+                catch
+                {
+                    failed++;
+                }
+                finally
+                {
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(tempPath) && File.Exists(tempPath))
+                            File.Delete(tempPath);
+                    }
+                    catch { }
+                }
+            }
+
+            await SaveAndRefreshAsync();
+            DownloadAllStatusText.Text = $"Concluído • {imported} novos • {skipped} já existentes • {failed} falhas";
+            InfoText.Text = $"Download em lote concluído: {imported} pacote(s) importado(s).";
+
+            MessageBox.Show(
+                $"Concluído.\n\nImportados: {imported}\nJá existentes: {skipped}\nFalhas: {failed}\n\nOs pacotes foram adicionados à biblioteca local; nenhum deles foi ativado automaticamente.",
+                "Download concluído",
+                MessageBoxButton.OK,
+                failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            DownloadAllStatusText.Text = "Falha no download em lote";
+            MessageBox.Show($"Não foi possível baixar os pacotes:\n{ex.Message}", "LoL Skin Manager", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            DownloadAllButton.IsEnabled = true;
+        }
     }
 
     private async void ChampionsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
