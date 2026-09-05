@@ -27,6 +27,9 @@
                                 <Setter TargetName="B" Property="Background" Value="#2B3545"/>
                                 <Setter TargetName="B" Property="BorderBrush" Value="#C89B3C"/>
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="B" Property="Opacity" Value="0.55"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -75,9 +78,21 @@
                     <TextBlock Text="LoL Skin Manager" FontSize="32" FontWeight="SemiBold" Foreground="#FFFFFF"/>
                     <TextBlock Text="Catálogo visual + biblioteca local de custom skins" Foreground="#C7CFDC" Margin="0,6,0,0"/>
                 </StackPanel>
-                <Border Grid.Column="1" Background="#0D121A" CornerRadius="14" Padding="12,8" VerticalAlignment="Center">
-                    <TextBlock x:Name="CatalogStatusText" Foreground="#D6DEEA" Text="Carregando catálogo..."/>
-                </Border>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#0D121A" CornerRadius="14" Padding="12,8" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <StackPanel>
+                            <TextBlock x:Name="CatalogStatusText" Foreground="#D6DEEA" Text="Carregando catálogo..." HorizontalAlignment="Right"/>
+                            <TextBlock x:Name="DownloadAllStatusText" Foreground="#AEB9C9" FontSize="11" Margin="0,3,0,0" HorizontalAlignment="Right" Text="Pacotes remotos: não verificado"/>
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="DownloadAllButton"
+                            Style="{StaticResource ActionButton}"
+                            Content="Baixar todos os .fantome"
+                            Click="DownloadAll_Click"
+                            Background="#6D5422"
+                            BorderBrush="#C89B3C"
+                            ToolTip="Baixa de uma vez todos os pacotes .fantome cadastrados em skins/index.json"/>
+                </StackPanel>
             </Grid>
         </Border>
 
