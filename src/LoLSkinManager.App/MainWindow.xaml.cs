@@ -73,7 +73,7 @@ public partial class MainWindow : Window
             foreach (var skin in skins)
                 _skins.Add(skin);
 
-            SkinCountText.Text = $"{_skins.Count} skins oficiais • clique em uma skin para procurar o .fantome mapeado";
+            SkinCountText.Text = $"{_skins.Count} skins oficiais • clique em uma skin para selecionar o pacote correspondente";
         }
         catch (Exception ex)
         {
@@ -90,51 +90,67 @@ public partial class MainWindow : Window
         try
         {
             SkinCountText.Text = $"Procurando pacote para {skin.Name}...";
-            var mapping = await _packageRepository.FindPackageAsync(skin);
+            RepositorySkinPackage? mapping = null;
+
+            try
+            {
+                mapping = await _packageRepository.FindPackageAsync(skin);
+            }
+            catch
+            {
+                // Se o índice remoto estiver indisponível, o fluxo local continua funcionando.
+            }
 
             if (mapping is null)
             {
-                SkinCountText.Text = $"{skin.Name}: nenhum .fantome mapeado no repositório.";
-                MessageBox.Show(
-                    $"Ainda não existe um pacote .fantome mapeado para {skin.Name}.\n\nAdicione a entrada correspondente em skins/index.json e o arquivo em skins/packages/.",
-                    "Pacote não encontrado",
-                    MessageBoxButton.OK,
+                SkinCountText.Text = $"{skin.Name}: sem pacote remoto. Selecione um .fantome local.";
+
+                var answer = MessageBox.Show(
+                    $"Ainda não há um .fantome mapeado no GitHub para {skin.Name}.\n\nDeseja selecionar um arquivo .fantome do seu computador agora?",
+                    "Selecionar pacote",
+                    MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
+
+                if (answer != MessageBoxResult.Yes)
+                    return;
+
+                var dialog = new OpenFileDialog
+                {
+                    Title = $"Selecionar .fantome para {skin.Name}",
+                    Filter = "Pacote Fantome (*.fantome)|*.fantome|Arquivo ZIP (*.zip)|*.zip",
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog() != true)
+                {
+                    SkinCountText.Text = $"{skin.Name}: seleção cancelada.";
+                    return;
+                }
+
+                await ImportAndSelectAsync(dialog.FileName, skin.Name);
+                SkinCountText.Text = $"{skin.Name}: pacote local importado e selecionado.";
                 return;
             }
 
-            var existing = _packages.FirstOrDefault(p =>
-                p.Name.Equals(mapping.DisplayName ?? skin.Name, StringComparison.OrdinalIgnoreCase));
+            var expectedName = string.IsNullOrWhiteSpace(mapping.DisplayName) ? skin.Name : mapping.DisplayName!;
+            var existing = _packages.FirstOrDefault(p => p.Name.Equals(expectedName, StringComparison.OrdinalIgnoreCase));
 
             if (existing is not null)
             {
-                foreach (var item in _packages)
-                    item.IsEnabled = ReferenceEquals(item, existing);
-
+                SelectOnly(existing);
                 await SaveAndRefreshAsync();
                 PackagesList.SelectedItem = existing;
-                SkinCountText.Text = $"{skin.Name}: pacote já importado e selecionado no perfil.";
+                SkinCountText.Text = $"{skin.Name}: pacote já importado e selecionado.";
                 return;
             }
 
-            SkinCountText.Text = $"Baixando pacote de {skin.Name}...";
+            SkinCountText.Text = $"Baixando pacote de {skin.Name} do GitHub...";
             var tempPath = await _packageRepository.DownloadPackageAsync(mapping);
 
             try
             {
-                var package = await _library.ImportAsync(tempPath);
-                package.Name = string.IsNullOrWhiteSpace(mapping.DisplayName) ? skin.Name : mapping.DisplayName!;
-
-                foreach (var item in _packages)
-                    item.IsEnabled = false;
-
-                package.IsEnabled = true;
-                _packages.Add(package);
-                await SaveAndRefreshAsync();
-                PackagesList.SelectedItem = package;
-
-                SkinCountText.Text = $"{skin.Name}: .fantome importado e selecionado no perfil.";
-                InfoText.Text = $"Selecionado: {package.Name}. O pacote foi preparado localmente; nenhuma injeção no processo do jogo foi realizada.";
+                await ImportAndSelectAsync(tempPath, expectedName);
+                SkinCountText.Text = $"{skin.Name}: .fantome baixado, importado e selecionado.";
             }
             finally
             {
@@ -146,6 +162,26 @@ public partial class MainWindow : Window
             SkinCountText.Text = $"Falha ao preparar {skin.Name}.";
             MessageBox.Show($"Não foi possível preparar o pacote:\n{ex.Message}", "LoL Skin Manager", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private async Task ImportAndSelectAsync(string sourcePath, string displayName)
+    {
+        var package = await _library.ImportAsync(sourcePath);
+        package.Name = displayName;
+
+        SelectOnly(package);
+        _packages.Add(package);
+        await SaveAndRefreshAsync();
+        PackagesList.SelectedItem = package;
+        InfoText.Text = $"Selecionado: {package.Name}. Pacote preparado localmente.";
+    }
+
+    private void SelectOnly(SkinPackage selected)
+    {
+        foreach (var item in _packages)
+            item.IsEnabled = false;
+
+        selected.IsEnabled = true;
     }
 
     private void ChampionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
